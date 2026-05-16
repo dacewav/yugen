@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function hasRole(role) {
+      return isAuth() && request.auth.token.role == role;
+    }
+    function hasMinRole(minRole) {
+      let roles = {'owner': 5, 'admin': 4, 'editor': 3, 'member': 2, 'viewer': 1};
+      return isAuth() && roles[request.auth.token.role] >= roles[minRole];
+    }
+    function isOwner(memberId) {
+      return isAuth() && request.auth.token.memberId == memberId;
+    }
+
+    // ── /members ─────────────────────────────────────────────────
+    match /members/{memberId} {
+      allow read: if true;
+      allow create: if hasMinRole('admin');
+      allow update: if isOwner(memberId) || hasMinRole('admin');
+      allow delete: if hasRole('owner');
+    }
+
+    // ── /beats ───────────────────────────────────────────────────
+    match /beats/{beatId} {
+      allow read: if resource.data.isPublished == true || hasMinRole('editor');
+      allow create: if hasMinRole('editor');
+      allow update: if isOwner(resource.data.memberId) || hasMinRole('admin');
+      allow delete: if isOwner(resource.data.memberId) || hasMinRole('admin');
+
+      match /plays/{shardId} {
+        allow read: if hasMinRole('editor');
+        allow write: if true; // Distributed counter — server-side only in practice
+      }
+    }
+
+    // ── /drumkits ────────────────────────────────────────────────
+    match /drumkits/{kitId} {
+      allow read: if resource.data.isPublished == true || hasMinRole('editor');
+      allow create, update, delete: if hasMinRole('editor');
+    }
+
+    // ── /services ────────────────────────────────────────────────
+    match /services/{serviceId} {
+      allow read: if resource.data.isActive == true || hasMinRole('editor');
+      allow create, update, delete: if hasMinRole('admin');
+    }
+
+    // ── /orders ──────────────────────────────────────────────────
+    match /orders/{orderId} {
+      allow read: if hasMinRole('editor');
+      allow create: if true;
+      allow update: if hasMinRole('editor');
+      allow delete: if hasRole('owner');
+
+      match /timeline/{eventId} {
+        allow read: if hasMinRole('editor');
+        allow create: if hasMinRole('editor');
+        allow update, delete: if false;
+      }
+      match /messages/{msgId} {
+        allow read: if hasMinRole('editor');
+        allow create: if hasMinRole('editor');
+        allow update, delete: if false;
+      }
+    }
+
+    // ── /posts ───────────────────────────────────────────────────
+    match /posts/{postId} {
+      allow read: if resource.data.isPublished == true || hasMinRole('editor');
+      allow create: if hasMinRole('editor');
+      allow update: if isOwner(resource.data.authorId) || hasMinRole('admin');
+      allow delete: if isOwner(resource.data.authorId) || hasMinRole('admin');
+    }
+
+    // ── /drops ───────────────────────────────────────────────────
+    match /drops/{dropId} {
+      allow read: if resource.data.isPublished == true || hasMinRole('editor');
+      allow create, update, delete: if hasMinRole('admin');
+
+      match /buyers/{uid} {
+        allow read: if hasMinRole('editor') || request.auth.uid == uid;
+        allow create: if isAuth();
+        allow update, delete: if false;
+      }
+    }
+
+    // ── /events ──────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read: if resource.data.isPublished == true || hasMinRole('editor');
+      allow create, update, delete: if hasMinRole('admin');
+    }
+
+    // ── /projects (Collab Board) ─────────────────────────────────
+    match /projects/{projectId} {
+      allow read: if hasMinRole('member') ||
+                    (resource.data.visibility == 'public_teaser' &&
+                     resource.data.isPublished == true);
+      allow create: if hasMinRole('member');
+      allow update: if hasMinRole('member') &&
+                       request.auth.token.memberId in resource.data.membersInvolved;
+      allow delete: if hasMinRole('admin');
+
+      match /notes/{noteId} {
+        allow read, create: if hasMinRole('member');
+        allow update, delete: if false;
+      }
+    }
+
+    // ── /comments ────────────────────────────────────────────────
+    match /comments/{commentId} {
+      allow read: if resource.data.isApproved == true || hasMinRole('editor');
+      allow create: if isAuth() && request.auth.token.role != null;
+      allow update: if hasMinRole('editor');
+      allow delete: if hasMinRole('editor');
+    }
+
+    // ── /activity ────────────────────────────────────────────────
+    match /activity/{activityId} {
+      allow read: if (resource.data.isPublic == true) || hasMinRole('member');
+      allow create: if hasMinRole('editor');
+      allow update, delete: if false;
+    }
+
+    // ── /newsletter ──────────────────────────────────────────────
+    match /newsletter/{email} {
+      allow read: if hasMinRole('admin');
+      allow create: if true;
+      allow update: if true;
+      allow delete: if hasMinRole('admin');
+    }
+
+    // ── /config ──────────────────────────────────────────────────
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if hasRole('owner');
+    }
+  }
+}
