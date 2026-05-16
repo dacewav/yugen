@@ -52,23 +52,27 @@
                 <span class="license-name">Basic</span>
                 <span class="license-price">${data.beat.priceBasic}</span>
                 <span class="license-desc">MP3 lease</span>
+                <a href="/checkout?type=beat&id={data.beat.slug}&tier=basic" class="buy-btn">Comprar</a>
               </div>
               <div class="license-card featured">
                 <span class="license-name">Premium</span>
                 <span class="license-price">${data.beat.pricePremium}</span>
                 <span class="license-desc">WAV + stems</span>
+                <a href="/checkout?type=beat&id={data.beat.slug}&tier=premium" class="buy-btn">Comprar</a>
               </div>
               {#if data.beat.isExclusive}
                 <div class="license-card exclusive">
                   <span class="license-name">Exclusive</span>
                   <span class="license-price">${data.beat.priceExclusive}</span>
                   <span class="license-desc">Full rights — único comprador</span>
+                  <a href="/checkout?type=beat&id={data.beat.slug}&tier=exclusive" class="buy-btn exclusive-btn">Comprar exclusivo</a>
                 </div>
               {:else}
                 <div class="license-card">
                   <span class="license-name">Exclusive</span>
                   <span class="license-price">${data.beat.priceExclusive}</span>
                   <span class="license-desc">Full rights</span>
+                  <a href="/checkout?type=beat&id={data.beat.slug}&tier=exclusive" class="buy-btn">Comprar</a>
                 </div>
               {/if}
             </div>
@@ -254,7 +258,31 @@
   .license-desc {
     font-size: var(--text-xs);
     color: var(--text-muted);
+    margin-bottom: var(--space-md);
   }
+
+  .buy-btn {
+    display: inline-block;
+    padding: var(--space-xs) var(--space-lg);
+    background: var(--cyan-dim);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .buy-btn:hover { background: rgba(0, 240, 255, 0.15); }
+
+  .exclusive-btn {
+    background: rgba(255, 107, 157, 0.08);
+    border-color: var(--sakura);
+    color: var(--sakura);
+  }
+  .exclusive-btn:hover { background: rgba(255, 107, 157, 0.15); }
 
   .tag-list {
     display: flex;
