@@ -43,6 +43,7 @@
 
         <nav class="account-nav">
           <a href="/account/orders" class="nav-link">Mis Órdenes</a>
+          <a href="/account/favorites" class="nav-link">Favoritos</a>
         </nav>
       </div>
     {:else}
