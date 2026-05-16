@@ -18,8 +18,9 @@ export const load: PageServerLoad = async ({ url }) => {
       beats,
       filters: { genre, mood, key, sort, search, bpmMin, bpmMax, priceMin, priceMax },
     };
-  } catch {
+  } catch (e) {
     // Firestore not configured — return empty
+    console.error('[beats] Query error:', e);
     return {
       beats: [],
       filters: { genre, mood, key, sort, search, bpmMin, bpmMax, priceMin, priceMax },

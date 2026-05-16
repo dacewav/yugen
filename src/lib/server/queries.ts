@@ -2,6 +2,24 @@ import { adminDb, FieldValue } from './firebase-admin';
 import type { Beat, Drumkit, Service } from '$types/content';
 import type { Query } from 'firebase-admin/firestore';
 
+/** Convert Firestore document to plain POJO (serializable) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toPlain(doc: FirebaseFirestore.DocumentSnapshot): any {
+  const data = doc.data();
+  if (!data) return { id: doc.id };
+  const plain: Record<string, unknown> = { id: doc.id };
+  for (const [k, v] of Object.entries(data)) {
+    if (v && typeof v === 'object' && 'toDate' in v && typeof v.toDate === 'function') {
+      plain[k] = (v as unknown as { toDate: () => Date }).toDate().toISOString();
+    } else if (v && typeof v === 'object' && v instanceof Date) {
+      plain[k] = v.toISOString();
+    } else {
+      plain[k] = v;
+    }
+  }
+  return plain;
+}
+
 // ── Beat filters ────────────────────────────────────────────────
 export interface BeatFilters {
   genre?: string;
@@ -17,7 +35,9 @@ export interface BeatFilters {
 
 export async function getBeats(filters: BeatFilters = {}): Promise<Beat[]> {
   const db = adminDb();
-  let query: Query = db.collection('beats').where('isPublished', '==', true);
+  // Start with published beats, ordered by creation date
+  // Note: composite indexes need to be deployed for genre/mood + sort combos
+  let query: Query = db.collection('beats');
 
   // Apply Firestore-compatible filters (equality + range on single field)
   if (filters.genre) {
@@ -46,10 +66,10 @@ export async function getBeats(filters: BeatFilters = {}): Promise<Beat[]> {
   }
 
   const snap = await query.get();
-  let beats = snap.docs.map(d => ({
-    id: d.id,
-    ...d.data(),
-  })) as Beat[];
+  let beats = snap.docs.map(toPlain) as Beat[];
+
+  // Filter published in memory (avoids composite index requirement)
+  beats = beats.filter(b => b.isPublished);
 
   // Post-query filters (BPM range, price range, key, search)
   if (filters.bpmMin !== undefined) {
@@ -93,7 +113,7 @@ export async function getBeatBySlug(slug: string): Promise<Beat | null> {
 
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() } as Beat;
+  return toPlain(doc) as Beat;
 }
 
 export async function getFeaturedBeats(limit = 4): Promise<Beat[]> {
@@ -105,18 +125,17 @@ export async function getFeaturedBeats(limit = 4): Promise<Beat[]> {
     .limit(limit)
     .get();
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Beat[];
+  return snap.docs.map(toPlain) as Beat[];
 }
 
 // ── Drumkits ────────────────────────────────────────────────────
 export async function getDrumkits(): Promise<Drumkit[]> {
   const db = adminDb();
   const snap = await db.collection('drumkits')
-    .where('isPublished', '==', true)
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Drumkit[];
+  return snap.docs.map(toPlain).filter(d => d.isPublished) as Drumkit[];
 }
 
 export async function getDrumkitBySlug(slug: string): Promise<Drumkit | null> {
@@ -129,18 +148,17 @@ export async function getDrumkitBySlug(slug: string): Promise<Drumkit | null> {
 
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() } as Drumkit;
+  return toPlain(doc) as Drumkit;
 }
 
 // ── Services ────────────────────────────────────────────────────
 export async function getServices(): Promise<Service[]> {
   const db = adminDb();
   const snap = await db.collection('services')
-    .where('isActive', '==', true)
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Service[];
+  return snap.docs.map(toPlain).filter(d => d.isActive) as Service[];
 }
 
 export async function getServiceBySlug(slug: string): Promise<Service | null> {
@@ -153,7 +171,7 @@ export async function getServiceBySlug(slug: string): Promise<Service | null> {
 
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() } as Service;
+  return toPlain(doc) as Service;
 }
 
 // ── Client helpers ──────────────────────────────────────────────
@@ -161,7 +179,7 @@ export async function getClient(uid: string) {
   const db = adminDb();
   const doc = await db.doc(`clients/${uid}`).get();
   if (!doc.exists) return null;
-  return { id: doc.id, ...doc.data() } as Record<string, unknown>;
+  return toPlain(doc) as Record<string, unknown>;
 }
 
 export async function getClientOrders(uid: string) {
@@ -171,7 +189,7 @@ export async function getClientOrders(uid: string) {
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Record<string, unknown>[];
+  return snap.docs.map(toPlain) as Record<string, unknown>[];
 }
 
 // ── Exclusivity ─────────────────────────────────────────────────
@@ -292,9 +310,8 @@ export interface Drop {
 export async function getDrops(): Promise<Drop[]> {
   const db = adminDb();
   const snap = await db.collection('drops')
-    .where('isPublished', '==', true)
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Drop[];
+  return snap.docs.map(toPlain).filter(d => d.isPublished) as Drop[];
 }

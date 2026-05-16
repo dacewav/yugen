@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
+  import { page } from '$app/state';
   let { data }: { data: PageData } = $props();
 
   const genres = ['trap', 'drill', 'r&b', 'boom bap', 'lo-fi'];
@@ -12,7 +13,7 @@
   ];
 
   function buildUrl(params: Record<string, string | undefined>) {
-    const url = new URL(window.location.href);
+    const url = new URL(page.url.href);
     for (const [k, v] of Object.entries(params)) {
       if (v) url.searchParams.set(k, v);
       else url.searchParams.delete(k);
