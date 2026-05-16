@@ -1,5 +1,6 @@
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { env } from '$env/dynamic/private';
+import { getPriceFromDb, type PaymentParams } from './stripe';
 
 let _mp: MercadoPagoConfig;
 
@@ -12,23 +13,21 @@ function getMP(): MercadoPagoConfig {
   return _mp;
 }
 
-export async function createMPPreference(params: {
-  orderId: string;
-  title: string;
-  price: number;
-  email: string;
-}): Promise<string> {
+export async function createMPPreference(params: PaymentParams & { orderId: string }): Promise<string> {
+  const price = await getPriceFromDb(params);
+  const mpPrice = price.mxn ?? Math.round(price.usd * 17.5); // Fallback exchange rate
+
   const preference = new Preference(getMP());
   const response = await preference.create({
     body: {
       items: [{
         id: params.orderId,
-        title: params.title,
+        title: price.productName,
         quantity: 1,
         currency_id: 'MXN',
-        unit_price: params.price,
+        unit_price: mpPrice,
       }],
-      payer: { email: params.email },
+      payer: { email: params.clientEmail },
       external_reference: params.orderId,
       notification_url: `${env.PUBLIC_SITE_URL}/api/mp/webhook`,
       back_urls: {

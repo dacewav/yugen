@@ -2,6 +2,7 @@ import { stripe } from '$lib/server/stripe';
 import { adminDb, FieldValue } from '$lib/server/firebase-admin';
 import { sendEmail } from '$lib/server/resend';
 import { orderConfirmationTemplate } from '$lib/server/email-templates';
+import { markBeatSold, releaseBeat } from '$lib/server/queries';
 import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
@@ -32,7 +33,7 @@ async function handleEvent(event: any) {
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const intent = event.data.object;
-      const { orderId } = intent.metadata;
+      const { orderId, productType, productId, tier, clientEmail, clientName } = intent.metadata;
 
       await db.runTransaction(async (tx) => {
         const orderRef = db.doc(`orders/${orderId}`);
@@ -44,7 +45,7 @@ async function handleEvent(event: any) {
         tx.update(orderRef, {
           'payment.status': 'paid',
           'payment.paymentId': intent.id,
-          status: 'stems_needed',
+          status: productType === 'beat' ? 'completed' : 'stems_needed',
           updatedAt: FieldValue.serverTimestamp(),
         });
 
@@ -54,6 +55,24 @@ async function handleEvent(event: any) {
           timestamp: FieldValue.serverTimestamp(),
         });
       });
+
+      // For exclusive beats, mark as sold
+      if (productType === 'beat' && tier === 'exclusive' && productId) {
+        await markBeatSold(productId, 'stripe-buyer', orderId).catch(console.error);
+      }
+
+      // Add order to client's purchase history if authenticated
+      if (clientEmail) {
+        const clientSnap = await db.collection('clients')
+          .where('email', '==', clientEmail)
+          .limit(1)
+          .get();
+        if (!clientSnap.empty) {
+          await clientSnap.docs[0].ref.update({
+            purchaseHistory: FieldValue.arrayUnion(orderId),
+          }).catch(console.error);
+        }
+      }
 
       // Send confirmation email
       const orderDoc = await db.doc(`orders/${orderId}`).get();
@@ -78,13 +97,18 @@ async function handleEvent(event: any) {
 
     case 'payment_intent.payment_failed': {
       const intent = event.data.object;
-      const { orderId } = intent.metadata;
+      const { orderId, productType, productId, tier } = intent.metadata;
 
       await db.doc(`orders/${orderId}`).update({
         'payment.status': 'failed',
         status: 'cancelled',
         updatedAt: FieldValue.serverTimestamp(),
       }).catch(console.error);
+
+      // Release exclusive beat reservation
+      if (productType === 'beat' && tier === 'exclusive' && productId) {
+        await releaseBeat(productId, 'checkout-' + orderId).catch(console.error);
+      }
       break;
     }
 

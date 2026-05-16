@@ -1,13 +1,14 @@
 import { adminDb, FieldValue } from '$lib/server/firebase-admin';
 import { rateLimit } from '$lib/server/rate-limit';
 import { CreateOrderSchema } from '$utils/validators';
-import { createPaymentIntent } from '$lib/server/stripe';
+import { createPaymentIntent, getPriceFromDb } from '$lib/server/stripe';
 import { createMPPreference } from '$lib/server/mercadopago';
+import { reserveBeat } from '$lib/server/queries';
 import { json, error } from '@sveltejs/kit';
 import crypto from 'crypto';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   await rateLimit('orders', ip);
 
@@ -19,23 +20,42 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const data = result.data;
+
+  // Get real price from Firestore
+  let price;
+  try {
+    price = await getPriceFromDb(data);
+  } catch (e) {
+    throw error(400, e instanceof Error ? e.message : 'Error al obtener precio');
+  }
+
+  // For exclusive beats, reserve before creating order
+  if (data.beatId && data.tier === 'exclusive') {
+    const uid = locals.user?.uid ?? 'guest-' + Date.now();
+    const reserved = await reserveBeat(data.beatId, uid);
+    if (!reserved) {
+      throw error(409, 'El beat exclusivo ya no está disponible');
+    }
+  }
+
   const portalToken = crypto.randomBytes(32).toString('hex');
   const db = adminDb();
 
-  // Create order document
+  // Create order document with real data
   const orderRef = db.collection('orders').doc();
   await orderRef.set({
+    clientId: locals.user?.uid ?? null,
     clientName: data.clientName,
     clientEmail: data.clientEmail,
-    productType: data.serviceId ? 'service' : data.beatId ? 'beat' : data.kitId ? 'drumkit' : 'drop',
-    productId: data.serviceId ?? data.beatId ?? data.kitId ?? data.dropId,
-    productName: '', // Fetch from Firestore
+    productType: price.productType,
+    productId: price.productId,
+    productName: price.productName,
     tier: data.tier ?? null,
     status: 'pending_payment',
     payment: {
       method: data.paymentMethod,
       status: 'pending',
-      amount: 0, // Fetch real price
+      amount: data.paymentMethod === 'stripe' ? price.usd : (price.mxn ?? Math.round(price.usd * 17.5)),
       currency: data.paymentMethod === 'stripe' ? 'USD' : 'MXN',
     },
     notes: data.notes ?? null,
@@ -53,22 +73,21 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Handle payment
   if (data.paymentMethod === 'stripe') {
-    const { clientSecret } = await createPaymentIntent({
-      serviceId: data.serviceId,
-      beatId: data.beatId,
-      kitId: data.kitId,
-      dropId: data.dropId,
-      clientEmail: data.clientEmail,
-      notes: data.notes,
-    });
-    return json({ orderId: orderRef.id, clientSecret, portalToken });
+    try {
+      const { clientSecret } = await createPaymentIntent(data);
+      return json({ orderId: orderRef.id, clientSecret, portalToken });
+    } catch (e) {
+      // Rollback order on payment setup failure
+      await orderRef.update({ status: 'cancelled', 'payment.status': 'failed' });
+      throw error(500, e instanceof Error ? e.message : 'Error al crear pago');
+    }
   } else {
-    const initPoint = await createMPPreference({
-      orderId: orderRef.id,
-      title: 'Orden YUGEN',
-      price: 0, // Fetch real price
-      email: data.clientEmail,
-    });
-    return json({ orderId: orderRef.id, initPoint, portalToken });
+    try {
+      const initPoint = await createMPPreference({ ...data, orderId: orderRef.id });
+      return json({ orderId: orderRef.id, initPoint, portalToken });
+    } catch (e) {
+      await orderRef.update({ status: 'cancelled', 'payment.status': 'failed' });
+      throw error(500, e instanceof Error ? e.message : 'Error al crear preferencia de MercadoPago');
+    }
   }
 };

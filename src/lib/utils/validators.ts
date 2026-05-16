@@ -5,7 +5,7 @@ export const CreateOrderSchema = z.object({
   beatId: z.string().min(1).max(100).optional(),
   kitId: z.string().min(1).max(100).optional(),
   dropId: z.string().min(1).max(100).optional(),
-  tier: z.enum(['basic', 'standard', 'premium']).optional(),
+  tier: z.enum(['basic', 'standard', 'premium', 'exclusive']).optional(),
   clientName: z.string().min(2).max(100).trim(),
   clientEmail: z.string().email().toLowerCase().trim(),
   notes: z.string().max(2000).trim().optional(),
