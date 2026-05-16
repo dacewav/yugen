@@ -36,9 +36,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     try {
       const decoded = await _auth.verifySessionCookie(sessionCookie, true);
 
-      // Verify claims version — force logout if stale
-      let claimsVersion = 0;
-      if (decoded.memberId) {
+      // Check if user is crew (has member document with custom claims)
+      const isCrew = !!decoded.memberId;
+
+      if (isCrew) {
+        // Verify claims version for crew members
+        let claimsVersion = 0;
         try {
           const memberDoc = await _db.doc(`members/${decoded.memberId}`).get();
           if (memberDoc.exists) {
@@ -47,19 +50,31 @@ export const handle: Handle = async ({ event, resolve }) => {
         } catch {
           // Firestore read failed — allow session but skip version check
         }
-      }
 
-      if (decoded.claimsVersion !== undefined && decoded.claimsVersion !== claimsVersion) {
-        event.cookies.delete('__session', { path: '/' });
-        event.locals.user = null;
+        if (decoded.claimsVersion !== undefined && decoded.claimsVersion !== claimsVersion) {
+          event.cookies.delete('__session', { path: '/' });
+          event.locals.user = null;
+        } else {
+          event.locals.user = {
+            uid: decoded.uid,
+            email: decoded.email ?? '',
+            role: (decoded.role as string ?? 'viewer') as 'owner' | 'admin' | 'editor' | 'member' | 'viewer',
+            memberId: (decoded.memberId as string) ?? null,
+            crewName: (decoded.crewName as string) ?? null,
+            claimsVersion,
+            isClient: false,
+          };
+        }
       } else {
+        // Client (authenticated but no crew claims)
         event.locals.user = {
           uid: decoded.uid,
           email: decoded.email ?? '',
-          role: (decoded.role as string ?? 'viewer') as 'owner' | 'admin' | 'editor' | 'member' | 'viewer',
-          memberId: (decoded.memberId as string) ?? null,
-          crewName: (decoded.crewName as string) ?? null,
-          claimsVersion,
+          role: 'viewer',
+          memberId: null,
+          crewName: null,
+          claimsVersion: 0,
+          isClient: true,
         };
       }
     } catch {

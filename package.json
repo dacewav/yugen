@@ -10,6 +10,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "seed": "node scripts/seed.mjs",
     "postinstall": "node scripts/patch-cf-adapter.mjs"
   },
   "devDependencies": {

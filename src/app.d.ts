@@ -8,6 +8,7 @@ declare global {
         memberId: string | null;
         crewName: string | null;
         claimsVersion: number;
+        isClient: boolean;
       } | null;
     }
     interface PageData {

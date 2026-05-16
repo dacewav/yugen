@@ -22,6 +22,13 @@ export interface Beat {
   plays: number;
   isPublished: boolean;
   isFeatured: boolean;
+  isExclusive: boolean;
+  isSold: boolean;
+  soldTo?: string;       // client uid
+  soldAt?: Date;
+  soldOrderId?: string;
+  reservedBy?: string;   // uid of client with active reservation
+  reservedUntil?: Date;  // timestamp when reservation expires
   createdAt: Date;
   updatedAt: Date;
 }

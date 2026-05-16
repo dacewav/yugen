@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
-  export let data: PageData;
+  let { data }: { data: PageData } = $props();
 </script>
 
 <svelte:head>
@@ -17,6 +17,12 @@
           {:else}
             <div class="cover-placeholder">♫</div>
           {/if}
+          {#if data.beat.isExclusive}
+            <span class="exclusive-badge">EXCLUSIVE</span>
+          {/if}
+          {#if data.beat.isSold}
+            <div class="sold-overlay">VENDIDO</div>
+          {/if}
         </div>
 
         <div class="beat-info">
@@ -30,28 +36,51 @@
               <span class="meta">{data.beat.key}</span>
             {/if}
             <span class="meta">{data.beat.plays ?? 0} plays</span>
+            {#if data.beat.mood?.length}
+              <span class="meta">{data.beat.mood.join(', ')}</span>
+            {/if}
           </div>
 
           <!-- Waveform player placeholder -->
-          <div class="waveform-container" id="waveform"></div>
+          <div class="waveform-container" id="waveform">Waveform player — próximamente</div>
 
-          <div class="licenses">
-            <div class="license-card">
-              <span class="license-name">Basic</span>
-              <span class="license-price">${data.beat.priceBasic}</span>
-              <span class="license-desc">MP3 lease</span>
+          {#if data.beat.isSold}
+            <div class="sold-message">Este beat exclusivo ya fue vendido.</div>
+          {:else}
+            <div class="licenses">
+              <div class="license-card">
+                <span class="license-name">Basic</span>
+                <span class="license-price">${data.beat.priceBasic}</span>
+                <span class="license-desc">MP3 lease</span>
+              </div>
+              <div class="license-card featured">
+                <span class="license-name">Premium</span>
+                <span class="license-price">${data.beat.pricePremium}</span>
+                <span class="license-desc">WAV + stems</span>
+              </div>
+              {#if data.beat.isExclusive}
+                <div class="license-card exclusive">
+                  <span class="license-name">Exclusive</span>
+                  <span class="license-price">${data.beat.priceExclusive}</span>
+                  <span class="license-desc">Full rights — único comprador</span>
+                </div>
+              {:else}
+                <div class="license-card">
+                  <span class="license-name">Exclusive</span>
+                  <span class="license-price">${data.beat.priceExclusive}</span>
+                  <span class="license-desc">Full rights</span>
+                </div>
+              {/if}
             </div>
-            <div class="license-card featured">
-              <span class="license-name">Premium</span>
-              <span class="license-price">${data.beat.pricePremium}</span>
-              <span class="license-desc">WAV + stems</span>
+          {/if}
+
+          {#if data.beat.tags?.length}
+            <div class="tag-list">
+              {#each data.beat.tags as tag}
+                <span class="tag">{tag}</span>
+              {/each}
             </div>
-            <div class="license-card">
-              <span class="license-name">Exclusive</span>
-              <span class="license-price">${data.beat.priceExclusive}</span>
-              <span class="license-desc">Full rights</span>
-            </div>
-          </div>
+          {/if}
         </div>
       </div>
     {:else}
@@ -74,6 +103,7 @@
     border-radius: var(--radius-lg);
     overflow: hidden;
     background: var(--bg-card);
+    position: relative;
   }
 
   .beat-cover img {
@@ -90,6 +120,32 @@
     justify-content: center;
     font-size: 4rem;
     color: var(--text-faint);
+  }
+
+  .exclusive-badge {
+    position: absolute;
+    top: var(--space-md);
+    right: var(--space-md);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 4px 12px;
+    background: var(--sakura);
+    color: white;
+    border-radius: var(--radius-sm);
+  }
+
+  .sold-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--sakura);
+    font-size: var(--text-2xl);
+    font-weight: 800;
+    letter-spacing: 4px;
   }
 
   .section-tag {
@@ -115,6 +171,7 @@
     display: flex;
     gap: var(--space-md);
     margin-bottom: var(--space-xl);
+    flex-wrap: wrap;
   }
 
   .meta {
@@ -136,6 +193,16 @@
     justify-content: center;
     color: var(--text-faint);
     font-size: var(--text-sm);
+  }
+
+  .sold-message {
+    padding: var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--sakura);
+    border-radius: var(--radius-lg);
+    color: var(--sakura);
+    text-align: center;
+    font-weight: 600;
   }
 
   .licenses {
@@ -165,6 +232,11 @@
     background: var(--neon-dim);
   }
 
+  .license-card.exclusive {
+    border-color: var(--sakura);
+    background: rgba(255, 107, 157, 0.05);
+  }
+
   .license-name {
     font-size: var(--text-xs);
     letter-spacing: 2px;
@@ -182,6 +254,21 @@
   .license-desc {
     font-size: var(--text-xs);
     color: var(--text-muted);
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: var(--space-xl);
+  }
+
+  .tag {
+    font-size: var(--text-xs);
+    padding: 2px 8px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border-radius: var(--radius-full);
   }
 
   .text-muted { color: var(--text-muted); }

@@ -1,7 +1,11 @@
+import { getDrops } from '$lib/server/queries';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  // TODO: Query Firestore for published drops
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { drops: [] as any[] };
+  try {
+    const drops = await getDrops();
+    return { drops };
+  } catch {
+    return { drops: [] };
+  }
 };

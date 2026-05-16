@@ -16,6 +16,17 @@ service cloud.firestore {
     function isOwner(memberId) {
       return isAuth() && request.auth.token.memberId == memberId;
     }
+    function isClientOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ── /clients ─────────────────────────────────────────────────
+    match /clients/{uid} {
+      allow read: if isClientOwner(uid) || hasMinRole('editor');
+      allow create: if true; // Created on login
+      allow update: if isClientOwner(uid) || hasMinRole('editor');
+      allow delete: if hasRole('owner');
+    }
 
     // ── /members ─────────────────────────────────────────────────
     match /members/{memberId} {

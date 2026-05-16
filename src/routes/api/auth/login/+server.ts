@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { adminAuth } from '$lib/server/firebase-admin';
+import { adminAuth, adminDb, FieldValue } from '$lib/server/firebase-admin';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -21,6 +21,46 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       maxAge: expiresIn / 1000,
       path: '/',
     });
+
+    // Create or update client document in Firestore (for non-crew users)
+    try {
+      const decoded = await adminAuth().verifyIdToken(idToken);
+      const uid = decoded.uid;
+
+      // Check if user is crew (has custom claims with memberId)
+      const isCrew = !!decoded.memberId;
+
+      if (!isCrew) {
+        const clientRef = adminDb().doc(`clients/${uid}`);
+        const clientDoc = await clientRef.get();
+
+        if (!clientDoc.exists) {
+          // New client — create document
+          await clientRef.set({
+            uid,
+            email: decoded.email ?? '',
+            displayName: decoded.name ?? decoded.email?.split('@')[0] ?? '',
+            photoURL: decoded.picture ?? null,
+            purchaseHistory: [],
+            favorites: [],
+            createdAt: FieldValue.serverTimestamp(),
+            lastLoginAt: FieldValue.serverTimestamp(),
+          });
+        } else {
+          // Existing client — update last login
+          await clientRef.update({
+            lastLoginAt: FieldValue.serverTimestamp(),
+            // Update email/photo in case they changed
+            email: decoded.email ?? clientDoc.data()?.email ?? '',
+            displayName: decoded.name ?? clientDoc.data()?.displayName ?? '',
+            photoURL: decoded.picture ?? clientDoc.data()?.photoURL ?? null,
+          });
+        }
+      }
+    } catch {
+      // Token verification for client creation failed — session cookie still valid
+      // This is non-critical; client will be created on next interaction
+    }
 
     return json({ status: 'ok' });
   } catch {
